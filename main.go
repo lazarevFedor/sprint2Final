@@ -21,13 +21,18 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 	var req Request
 	var resp Response
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("Что-то пошло не так"), http.StatusInternalServerError)
+		resp.Error = "Internal server error"
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	result, err := Calculator.Calc(req.Expression)
 	if err != nil {
-		resp.Error = "Expression is not valid"
-		w.WriteHeader(http.StatusUnprocessableEntity)
+		if err.Error() == "wrong symbol" {
+			resp.Error = "Expression is not valid"
+			w.WriteHeader(http.StatusUnprocessableEntity)
+		}
+		resp.Error = "Internal server error"
+		w.WriteHeader(http.StatusInternalServerError)
 	} else {
 		resp.Result = fmt.Sprintf("%f", result)
 		w.WriteHeader(http.StatusOK)
@@ -35,7 +40,8 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		http.Error(w, fmt.Sprintf("Что-то пошло не так"), http.StatusInternalServerError)
+		resp.Error = "Internal server error"
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
 

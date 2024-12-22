@@ -73,7 +73,7 @@ func getResult(output string) (float64, error) {
 				stack = append(stack, node{Data: strconv.FormatFloat(result, 'f', 2, 64)})
 				current = ""
 			default:
-				return 0, errors.New("unknown error")
+				return 0, errors.New("wrong symbol")
 			}
 		} else {
 			if current != "" {
