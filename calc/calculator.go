@@ -1,15 +1,17 @@
-package Calculator
+package calc
 
 import (
 	"errors"
 	"strconv"
 )
 
+// node is a struct that contains data and priority
 type node struct {
 	Data     string
 	Priority int
 }
 
+// priority returns the priority of the operator
 func priority(c string) int {
 	switch c {
 	case "+", "-":
@@ -27,6 +29,7 @@ func priority(c string) int {
 	}
 }
 
+// operation performs the operation of two numbers
 func operation(a, b float64, s string) (float64, error) {
 	switch s {
 	case "+":
@@ -45,6 +48,7 @@ func operation(a, b float64, s string) (float64, error) {
 	}
 }
 
+// getResult returns the result of the expression in Reverse Polish Notation
 func getResult(output string) (float64, error) {
 	var stack []node
 	var current string
@@ -82,6 +86,10 @@ func getResult(output string) (float64, error) {
 			}
 		}
 	}
+	if current != "" {
+		stack = append(stack, node{Data: current})
+		current = ""
+	}
 	if len(stack) > 1 {
 		return 0, errors.New("stack contains elements")
 	}
@@ -89,6 +97,7 @@ func getResult(output string) (float64, error) {
 	return result, nil
 }
 
+// Calc parse the expression into Reverse Polish Notation and returns the result
 func Calc(expression string) (float64, error) {
 	var stack []node
 	var output, current string

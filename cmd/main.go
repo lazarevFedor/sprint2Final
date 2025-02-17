@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sprint1Final/Calculator"
+	"sprint1Final/calc"
 )
 
 type Request struct {
@@ -25,7 +25,7 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	result, err := Calculator.Calc(req.Expression)
+	result, err := calc.Calc(req.Expression)
 	if err != nil {
 		if err.Error() == "wrong symbol" {
 			resp.Error = "Expression is not valid"
