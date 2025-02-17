@@ -115,11 +115,7 @@ func Calc(expression string) (float64, error) {
 						break
 					}
 					output += stack[len(stack)-1].Data + " "
-					if len(stack) != 0 {
-						stack = append(stack[:len(stack)-1])
-					} else {
-						return 0, errors.New("stack is empty")
-					}
+					stack = append(stack[:len(stack)-1])
 				}
 				stack = append(stack[:len(stack)-1])
 			}
