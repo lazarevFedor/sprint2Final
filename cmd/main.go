@@ -1,7 +1,7 @@
 package main
 
 import (
-	"sprint1Final/server"
+	"sprint1Final/internal/server"
 )
 
 func main() {

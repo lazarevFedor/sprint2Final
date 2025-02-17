@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sprint1Final/calc"
+	"sprint1Final/internal/calc"
 )
 
 // Request struct is used to parse the request body
