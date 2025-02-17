@@ -44,7 +44,7 @@ func operation(a, b float64, s string) (float64, error) {
 		}
 		return b / a, nil
 	default:
-		return 0, errors.New("unknown error")
+		return 0, errors.New("wrong operator")
 	}
 }
 
@@ -143,7 +143,7 @@ func Calc(expression string) (float64, error) {
 				stack = append(stack, node{Data: string(expression[i]), Priority: priority(string(expression[i]))})
 			}
 		default:
-			return 0, errors.New("unknown error")
+			return 0, errors.New("wrong symbol")
 		}
 	}
 	if current != "" {
