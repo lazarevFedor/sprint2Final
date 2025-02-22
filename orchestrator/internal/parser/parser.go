@@ -1,9 +1,12 @@
-package calc
+package parser
 
 import (
 	"errors"
+	obj "orchestrator/internal/entities"
 	"strconv"
 )
+
+//TODO: add comments, fix errors returning in Parse function and getResult function, maybe move node struct to entities
 
 // node is a struct that contains data and priority
 type node struct {
@@ -29,32 +32,12 @@ func priority(c string) int {
 	}
 }
 
-// operation performs the operation of two numbers
-func operation(a, b float64, s string) (float64, error) {
-	switch s {
-	case "+":
-		return b + a, nil
-	case "-":
-		return b - a, nil
-	case "*":
-		return b * a, nil
-	case "/":
-		if a == 0 {
-			return 0, errors.New("division by zero")
-		}
-		return b / a, nil
-	default:
-		return 0, errors.New("wrong operator")
-	}
-}
-
 // getResult returns the result of the expression in Reverse Polish Notation
-func getResult(output string) (float64, error) {
+func getResult(output string, ch *chan float64, Id int) (float64, error) {
 	var stack []node
 	var current string
 	var result float64
 	var tempVariable float64
-	var err error
 	for i := 0; i < len(output); i++ {
 		if output[i] != ' ' {
 			switch priority(string(output[i])) {
@@ -70,10 +53,11 @@ func getResult(output string) (float64, error) {
 				stack = append(stack[:len(stack)-1])
 				tempVariable, _ = strconv.ParseFloat(stack[len(stack)-1].Data, 64)
 				stack = append(stack[:len(stack)-1])
-				result, err = operation(result, tempVariable, string(output[i]))
-				if err != nil {
-					return 0, err
+				if result == 0 && output[i] == '/' {
+					return 0, errors.New("division by zero")
 				}
+				obj.Tasks.Enqueue(obj.Task{Id: Id, Arg1: tempVariable, Arg2: result, Operation: string(output[i])})
+				result = <-*ch
 				stack = append(stack, node{Data: strconv.FormatFloat(result, 'f', 2, 64)})
 				current = ""
 			default:
@@ -97,12 +81,22 @@ func getResult(output string) (float64, error) {
 	return result, nil
 }
 
-// Calc parse the expression into Reverse Polish Notation and returns the result
-func Calc(expression string) (float64, error) {
+// Parse the expression into Reverse Polish Notation and returns the result
+func Parse(expression string, Id int) {
+	defer obj.Wg.Done()
 	var stack []node
 	var output, current string
+	parserChan := make(chan float64)
+	obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "In progress"})
+	obj.ParserMutex.Lock()
+	obj.ParsersTree.Insert(Id, &parserChan)
+	obj.ParserMutex.Unlock()
 	if expression == "" {
-		return 0, errors.New("empty expression")
+		obj.ParserMutex.Lock()
+		obj.ParsersTree.Delete(Id)
+		obj.ParserMutex.Unlock()
+		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: errors.New("empty expression")})
+		return
 	}
 	for i := 0; i < len(expression); i++ {
 		switch priority(string(expression[i])) {
@@ -118,7 +112,10 @@ func Calc(expression string) (float64, error) {
 			} else {
 				for {
 					if len(stack) == 0 {
-						return 0, errors.New("'(' not found")
+						obj.ParserMutex.Lock()
+						obj.ParsersTree.Delete(Id)
+						obj.ParserMutex.Unlock()
+						obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: errors.New("'(' not found")})
 					}
 					if stack[len(stack)-1].Data == "(" {
 						break
@@ -143,7 +140,10 @@ func Calc(expression string) (float64, error) {
 				stack = append(stack, node{Data: string(expression[i]), Priority: priority(string(expression[i]))})
 			}
 		default:
-			return 0, errors.New("wrong symbol")
+			obj.ParserMutex.Lock()
+			obj.ParsersTree.Delete(Id)
+			obj.ParserMutex.Unlock()
+			obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: errors.New("wrong symbol")})
 		}
 	}
 	if current != "" {
@@ -154,9 +154,13 @@ func Calc(expression string) (float64, error) {
 		output += stack[len(stack)-1].Data + " "
 		stack = append(stack[:len(stack)-1])
 	}
-	result, err := getResult(output)
+	result, err := getResult(output, &parserChan, Id)
+	obj.ParserMutex.Lock()
+	obj.ParsersTree.Delete(Id)
+	obj.ParserMutex.Unlock()
 	if err != nil {
-		return 0, err
+		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: err})
+		return
 	}
-	return result, nil
+	obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Done", Result: result})
 }
