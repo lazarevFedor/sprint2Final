@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-//TODO: add comments, fix errors returning in Parse function and getResult function, maybe move node struct to entities
+//TODO: fix errors returning in Parse function and getResult function
 
 // node is a struct that contains data and priority
 type node struct {
@@ -95,7 +95,7 @@ func Parse(expression string, Id int) {
 		obj.ParserMutex.Lock()
 		obj.ParsersTree.Delete(Id)
 		obj.ParserMutex.Unlock()
-		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: errors.New("empty expression")})
+		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "empty expression"})
 		return
 	}
 	for i := 0; i < len(expression); i++ {
@@ -115,7 +115,7 @@ func Parse(expression string, Id int) {
 						obj.ParserMutex.Lock()
 						obj.ParsersTree.Delete(Id)
 						obj.ParserMutex.Unlock()
-						obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: errors.New("'(' not found")})
+						obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "'(' not found"})
 					}
 					if stack[len(stack)-1].Data == "(" {
 						break
@@ -143,7 +143,7 @@ func Parse(expression string, Id int) {
 			obj.ParserMutex.Lock()
 			obj.ParsersTree.Delete(Id)
 			obj.ParserMutex.Unlock()
-			obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: errors.New("wrong symbol")})
+			obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "wrong symbol"})
 		}
 	}
 	if current != "" {
@@ -159,7 +159,7 @@ func Parse(expression string, Id int) {
 	obj.ParsersTree.Delete(Id)
 	obj.ParserMutex.Unlock()
 	if err != nil {
-		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: err})
+		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: err.Error()})
 		return
 	}
 	obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Done", Result: result})
