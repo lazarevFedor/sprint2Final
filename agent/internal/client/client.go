@@ -6,10 +6,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"os"
+	"strconv"
 	"time"
 )
 
-//TODO: Add environment variable for computing power and operation time
+//TODO: handle errors
 
 // ManageTasks is a function that manages tasks
 func ManageTasks() {
@@ -17,14 +19,14 @@ func ManageTasks() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	//computingPower, err := strconv.Atoi(os.Getenv("COMPUTING_POWER"))
-	//if err != nil || computingPower <= 0 {
-	//	computingPower = 1
-	//}
+	computingPower, err := strconv.Atoi(os.Getenv("COMPUTING_POWER"))
+	if err != nil || computingPower <= 0 {
+		computingPower = 1
+	}
 
 	taskChan := make(chan entities.AgentResponse, 1)
 
-	for i := 0; i < 1; i++ {
+	for i := 0; i < computingPower; i++ {
 		go worker(client, taskChan)
 	}
 
@@ -91,5 +93,9 @@ func solveTask(client *http.Client, task entities.AgentResponse) {
 		// Обработка ошибки
 		return
 	}
-	resp.Body.Close()
+	err = resp.Body.Close()
+	if err != nil {
+		// Обработка ошибки
+		return
+	}
 }
