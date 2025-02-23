@@ -2,15 +2,16 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	obj "orchestrator/internal/entities"
 	"orchestrator/internal/parser"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
-//TODO: add comments, api/v1/expressions/:id endpoint, reset done tasks with goroutine with ticker
+//TODO: reset done tasks with goroutine with ticker
 
 // isValidExpression checks if the expression is valid
 func isValidExpression(expression string) bool {
@@ -67,16 +68,22 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 	var clientResponse obj.ClientResponse
 	err := json.NewDecoder(r.Body).Decode(&clientRequest)
 	if err != nil {
-		clientResponse.Error = errors.New("Internal server error")
+		clientResponse.Error = "Internal server error"
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 	if !isValidExpression(clientRequest.Expression) {
-		clientResponse.Error = errors.New("Expression is not valid")
+		clientResponse.Error = "Expression is not valid"
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
 	clientResponse.Id = obj.TasksLastID.GetValue()
+	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+	if err = json.NewEncoder(w).Encode(clientResponse); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	obj.TasksLastID.Increment()
 	obj.Wg.Add(1)
 	go parser.Parse(clientRequest.Expression, clientResponse.Id)
@@ -102,16 +109,40 @@ func expressionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func expressionIDHandler(w http.ResponseWriter, r *http.Request) {
+	urlParts := strings.Split(r.URL.Path, "/")
+	idStr := urlParts[len(urlParts)-1]
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, "Invalid ID", http.StatusInternalServerError)
+		return
+	}
+
+	expression := obj.Expressions.Get(strconv.Itoa(id))
+	if expression == nil {
+		http.Error(w, "Expression not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	if err = json.NewEncoder(w).Encode(expression); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+}
+
 // StartServer starts the server on port 8080 and listens for incoming requests
 func StartServer() error {
-	//obj.TasksLastID.Increment()
 	mux := http.NewServeMux()
+
 	// Handle functions for client requests
 	mux.HandleFunc("/api/v1/calculate", calculateHandler)
 	mux.HandleFunc("/api/v1/expressions", expressionHandler)
-	//mux.HandleFunc("/api/v1/expressions/:id", nil)
+	mux.HandleFunc("/api/v1/expressions/", expressionIDHandler)
+
 	// Handle functions for agent requests
 	mux.Handle("/internal/task", agentMiddleware(http.HandlerFunc(getHandler), http.HandlerFunc(postHandler)))
+
 	// Start the server
 	err := http.ListenAndServe(":8080", mux)
 	if err != nil {
