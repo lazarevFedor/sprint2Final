@@ -3,11 +3,46 @@ package parser
 import (
 	"errors"
 	obj "orchestrator/internal/entities"
+	"os"
 	"strconv"
 	"time"
 )
 
-//TODO: fix errors returning in Parse function and getResult function
+// getEnvAsInt returns the value of the environment variable as an integer
+func getEnvAsInt(name string, defaultValue int) int {
+	valueStr := os.Getenv(name)
+	if valueStr == "" {
+		return defaultValue
+	}
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
+// Time of operations in milliseconds
+var (
+	timeAdditionMs       = getEnvAsInt("TIME_ADDITION_MS", 100)
+	timeSubtractionMs    = getEnvAsInt("TIME_SUBTRACTION_MS", 100)
+	timeMultiplicationMs = getEnvAsInt("TIME_MULTIPLICATIONS_MS", 100)
+	timeDivisionMs       = getEnvAsInt("TIME_DIVISIONS_MS", 100)
+)
+
+func returnTimeOfOperation(operation rune) int {
+	switch operation {
+	case '+':
+		return timeAdditionMs
+	case '-':
+		return timeSubtractionMs
+	case '*':
+		return timeMultiplicationMs
+	case '/':
+		return timeDivisionMs
+	default:
+		return 100
+	}
+}
 
 // node is a struct that contains data and priority
 type node struct {
@@ -57,7 +92,7 @@ func getResult(output string, ch *chan float64, Id int) (float64, error) {
 				if result == 0 && output[i] == '/' {
 					return 0, errors.New("division by zero")
 				}
-				obj.Tasks.Enqueue(obj.Task{Id: Id, Arg1: tempVariable, Arg2: result, Operation: string(output[i])})
+				obj.Tasks.Enqueue(obj.Task{Id: Id, Arg1: tempVariable, Arg2: result, Operation: string(output[i]), OperationTime: returnTimeOfOperation(rune(output[i]))})
 				result = <-*ch
 				stack = append(stack, node{Data: strconv.FormatFloat(result, 'f', 2, 64)})
 				current = ""
@@ -94,7 +129,7 @@ func Parse(expression string, Id int) {
 	obj.ParserMutex.Unlock()
 	if expression == "" {
 		obj.ParserMutex.Lock()
-		obj.ParsersTree.Delete(Id)
+		_ = obj.ParsersTree.Delete(Id)
 		obj.ParserMutex.Unlock()
 		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "empty expression"})
 		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
@@ -116,7 +151,7 @@ func Parse(expression string, Id int) {
 				for {
 					if len(stack) == 0 {
 						obj.ParserMutex.Lock()
-						obj.ParsersTree.Delete(Id)
+						_ = obj.ParsersTree.Delete(Id)
 						obj.ParserMutex.Unlock()
 						obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "'(' not found"})
 						task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
@@ -146,7 +181,7 @@ func Parse(expression string, Id int) {
 			}
 		default:
 			obj.ParserMutex.Lock()
-			obj.ParsersTree.Delete(Id)
+			_ = obj.ParsersTree.Delete(Id)
 			obj.ParserMutex.Unlock()
 			obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "wrong symbol"})
 			task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
@@ -163,7 +198,7 @@ func Parse(expression string, Id int) {
 	}
 	result, err := getResult(output, &parserChan, Id)
 	obj.ParserMutex.Lock()
-	obj.ParsersTree.Delete(Id)
+	_ = obj.ParsersTree.Delete(Id)
 	obj.ParserMutex.Unlock()
 	if err != nil {
 		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: err.Error()})
