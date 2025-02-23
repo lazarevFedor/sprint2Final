@@ -6,12 +6,14 @@ import (
 	"net/http"
 	obj "orchestrator/internal/entities"
 	"orchestrator/internal/parser"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
+// startGarbageCollector starts the garbage collector to remove old tasks
 func startGarbageCollector() {
 	ticker := time.NewTicker(3 * time.Minute)
 	go func() {
@@ -47,7 +49,7 @@ func agentMiddleware(getHandler, postHandler http.Handler) http.Handler {
 	})
 }
 
-func getHandler(w http.ResponseWriter, r *http.Request) {
+func getHandler(w http.ResponseWriter, _ *http.Request) {
 	if obj.Tasks.IsEmpty() {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -104,7 +106,7 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 	go parser.Parse(clientRequest.Expression, clientResponse.Id)
 }
 
-func expressionHandler(w http.ResponseWriter, r *http.Request) {
+func expressionHandler(w http.ResponseWriter, _ *http.Request) {
 	expressionsMap := obj.Expressions.GetAll()
 	expressions := make([]obj.ClientResponse, 0, len(expressionsMap))
 
@@ -148,6 +150,13 @@ func expressionIDHandler(w http.ResponseWriter, r *http.Request) {
 
 // StartServer starts the server on port 8080 and listens for incoming requests
 func StartServer() error {
+	// Set the environment variables
+	_ = os.Setenv("TIME_ADDITION_MS", "100")
+	_ = os.Setenv("TIME_SUBTRACTION_MS", "100")
+	_ = os.Setenv("TIME_MULTIPLICATIONS_MS", "100")
+	_ = os.Setenv("TIME_DIVISIONS_MS", "100")
+	_ = os.Setenv("COMPUTING_POWER", "10")
+
 	mux := http.NewServeMux()
 	// Start the garbage collector to remove old tasks
 	startGarbageCollector()
