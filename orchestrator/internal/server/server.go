@@ -9,9 +9,24 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
-//TODO: reset done tasks with goroutine with ticker
+func startGarbageCollector() {
+	ticker := time.NewTicker(3 * time.Minute)
+	go func() {
+		for range ticker.C {
+			now := time.Now()
+			expressionsMap := obj.Expressions.GetAll()
+			for key, expr := range expressionsMap {
+				task, ok := expr.(obj.ClientResponse)
+				if ok && (task.Status == "Done" || task.Status == "Fail") && now.Sub(task.GetTimestamp()) > 3*time.Minute {
+					obj.Expressions.Delete(key)
+				}
+			}
+		}
+	}()
+}
 
 // isValidExpression checks if the expression is valid
 func isValidExpression(expression string) bool {
@@ -134,7 +149,8 @@ func expressionIDHandler(w http.ResponseWriter, r *http.Request) {
 // StartServer starts the server on port 8080 and listens for incoming requests
 func StartServer() error {
 	mux := http.NewServeMux()
-
+	// Start the garbage collector to remove old tasks
+	startGarbageCollector()
 	// Handle functions for client requests
 	mux.HandleFunc("/api/v1/calculate", calculateHandler)
 	mux.HandleFunc("/api/v1/expressions", expressionHandler)
