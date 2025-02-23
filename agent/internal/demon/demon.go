@@ -9,16 +9,16 @@ import (
 func CalculateExpression(a, b float64, operation string, operationTime int) (float64, error) {
 	switch operation {
 	case "+":
-		time.Sleep(time.Duration(operationTime) * time.Second)
+		time.Sleep(time.Duration(operationTime) * time.Millisecond)
 		return a + b, nil
 	case "-":
-		time.Sleep(time.Duration(operationTime) * time.Second)
+		time.Sleep(time.Duration(operationTime) * time.Millisecond)
 		return a - b, nil
 	case "*":
-		time.Sleep(time.Duration(operationTime) * time.Second)
+		time.Sleep(time.Duration(operationTime) * time.Millisecond)
 		return a * b, nil
 	case "/":
-		time.Sleep(time.Duration(operationTime) * time.Second)
+		time.Sleep(time.Duration(operationTime) * time.Millisecond)
 		return a / b, nil
 	default:
 		return 0, errors.New("wrong operator")
