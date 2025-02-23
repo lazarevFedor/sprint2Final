@@ -4,6 +4,7 @@ import (
 	"errors"
 	obj "orchestrator/internal/entities"
 	"strconv"
+	"time"
 )
 
 //TODO: fix errors returning in Parse function and getResult function
@@ -96,6 +97,8 @@ func Parse(expression string, Id int) {
 		obj.ParsersTree.Delete(Id)
 		obj.ParserMutex.Unlock()
 		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "empty expression"})
+		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
+		task.SetTimestamp(time.Now())
 		return
 	}
 	for i := 0; i < len(expression); i++ {
@@ -116,6 +119,8 @@ func Parse(expression string, Id int) {
 						obj.ParsersTree.Delete(Id)
 						obj.ParserMutex.Unlock()
 						obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "'(' not found"})
+						task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
+						task.SetTimestamp(time.Now())
 					}
 					if stack[len(stack)-1].Data == "(" {
 						break
@@ -144,6 +149,8 @@ func Parse(expression string, Id int) {
 			obj.ParsersTree.Delete(Id)
 			obj.ParserMutex.Unlock()
 			obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "wrong symbol"})
+			task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
+			task.SetTimestamp(time.Now())
 		}
 	}
 	if current != "" {
@@ -160,7 +167,11 @@ func Parse(expression string, Id int) {
 	obj.ParserMutex.Unlock()
 	if err != nil {
 		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: err.Error()})
+		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
+		task.SetTimestamp(time.Now())
 		return
 	}
 	obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Done", Result: result})
+	task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
+	task.SetTimestamp(time.Now())
 }
