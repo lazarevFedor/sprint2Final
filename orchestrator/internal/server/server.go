@@ -7,6 +7,7 @@ import (
 	obj "orchestrator/internal/entities"
 	"orchestrator/internal/parser"
 	"os"
+	"pkg"
 	"regexp"
 	"strconv"
 	"strings"
@@ -32,10 +33,11 @@ func startGarbageCollector() {
 
 // isValidExpression checks if the expression is valid
 func isValidExpression(expression string) bool {
-	re := regexp.MustCompile("^[\\d+\\-*/\\s]+$")
+	re := regexp.MustCompile("^[\\d+\\-*/\\s()]+$")
 	return re.MatchString(expression)
 }
 
+// agentMiddleware is a middleware that handles the agent requests
 func agentMiddleware(getHandler, postHandler http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -45,10 +47,12 @@ func agentMiddleware(getHandler, postHandler http.Handler) http.Handler {
 			postHandler.ServeHTTP(w, r)
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			pkg.ErrorLogger.Println("agentMiddleware error: Method not allowed")
 		}
 	})
 }
 
+// getHandler handles the /internal/task endpoint
 func getHandler(w http.ResponseWriter, _ *http.Request) {
 	if obj.Tasks.IsEmpty() {
 		w.WriteHeader(http.StatusNotFound)
@@ -58,20 +62,23 @@ func getHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(task); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		pkg.ErrorLogger.Println("getHandler error: Internal server error")
 		return
 	}
 }
 
+// postHandler handles the /internal/task endpoint
 func postHandler(w http.ResponseWriter, r *http.Request) {
 	var taskRes obj.ClientResponse
 	if err := json.NewDecoder(r.Body).Decode(&taskRes); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		pkg.ErrorLogger.Println("postHandler decoding error: Internal server error")
 		return
 	}
 	node := obj.ParsersTree.Search(taskRes.Id)
-	// TODO: invalid data, code 422?
 	if node == nil {
 		w.WriteHeader(http.StatusNotFound)
+		pkg.ErrorLogger.Println("postHandler error: Task not found")
 		return
 	}
 	ch := node.Value.(*chan float64)
@@ -87,11 +94,13 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		clientResponse.Error = "Internal server error"
 		w.WriteHeader(http.StatusInternalServerError)
+		pkg.ErrorLogger.Println("calculateHandler decoding error: Internal server error")
 		return
 	}
 	if !isValidExpression(clientRequest.Expression) {
 		clientResponse.Error = "Expression is not valid"
 		w.WriteHeader(http.StatusUnprocessableEntity)
+		pkg.ErrorLogger.Println("calculateHandler error: Expression is not valid")
 		return
 	}
 	clientResponse.Id = obj.TasksLastID.GetValue()
@@ -99,11 +108,13 @@ func calculateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(clientResponse); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		pkg.ErrorLogger.Println("calculateHandler encoding error: Internal server error")
 		return
 	}
 	obj.TasksLastID.Increment()
 	obj.Wg.Add(1)
 	go parser.Parse(clientRequest.Expression, clientResponse.Id)
+	pkg.InfoLogger.Println("calculateHandler: Parser created")
 }
 
 func expressionHandler(w http.ResponseWriter, _ *http.Request) {
@@ -122,6 +133,7 @@ func expressionHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{"expressions": expressions}); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		pkg.ErrorLogger.Println("expressionHandler encoding error: Internal server error")
 		return
 	}
 }
@@ -132,18 +144,21 @@ func expressionIDHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		http.Error(w, "Invalid ID", http.StatusInternalServerError)
+		pkg.ErrorLogger.Println("expressionIDHandler error: Invalid ID")
 		return
 	}
 
 	expression := obj.Expressions.Get(strconv.Itoa(id))
 	if expression == nil {
 		http.Error(w, "Expression not found", http.StatusNotFound)
+		pkg.ErrorLogger.Println("expressionIDHandler error: Expression not found")
 		return
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
 	if err = json.NewEncoder(w).Encode(expression); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		pkg.ErrorLogger.Println("expressionIDHandler encoding error: Internal server error")
 		return
 	}
 }
@@ -171,6 +186,7 @@ func StartServer() error {
 	// Start the server
 	err := http.ListenAndServe(":8080", mux)
 	if err != nil {
+		pkg.ErrorLogger.Println("could not start server: ", err)
 		return fmt.Errorf("could not start server: %v", err)
 	}
 	obj.Wg.Wait()

@@ -2,12 +2,12 @@ package main
 
 import (
 	"orchestrator/internal/server"
-	"pkg/logger"
+	"pkg"
 )
 
 func main() {
 	err := server.StartServer()
-	logger.Init()
+	pkg.Init()
 	if err != nil {
 		return
 	}

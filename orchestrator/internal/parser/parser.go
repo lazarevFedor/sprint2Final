@@ -4,6 +4,7 @@ import (
 	"errors"
 	obj "orchestrator/internal/entities"
 	"os"
+	"pkg"
 	"strconv"
 	"time"
 )
@@ -134,6 +135,7 @@ func Parse(expression string, Id int) {
 		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "empty expression"})
 		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 		task.SetTimestamp(time.Now())
+		pkg.ErrorLogger.Println("Expression with id", Id, "is failed with error:", "empty expression")
 		return
 	}
 	for i := 0; i < len(expression); i++ {
@@ -156,6 +158,7 @@ func Parse(expression string, Id int) {
 						obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "'(' not found"})
 						task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 						task.SetTimestamp(time.Now())
+						pkg.ErrorLogger.Println("Expression with id", Id, "is failed with error:", "'(' not found")
 					}
 					if stack[len(stack)-1].Data == "(" {
 						break
@@ -186,6 +189,7 @@ func Parse(expression string, Id int) {
 			obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "wrong symbol"})
 			task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 			task.SetTimestamp(time.Now())
+			pkg.ErrorLogger.Println("Expression with id", Id, "is failed with error:", "wrong symbol")
 		}
 	}
 	if current != "" {
@@ -204,9 +208,11 @@ func Parse(expression string, Id int) {
 		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: err.Error()})
 		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 		task.SetTimestamp(time.Now())
+		pkg.ErrorLogger.Println("Expression with id", Id, "is failed with error:", err)
 		return
 	}
 	obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Done", Result: result})
 	task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 	task.SetTimestamp(time.Now())
+	pkg.InfoLogger.Println("Expression with id", Id, "is done")
 }
