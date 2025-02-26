@@ -2,12 +2,11 @@ package main
 
 import (
 	"orchestrator/internal/server"
-	"pkg"
 )
 
 func main() {
+	//pkg.Init()
 	err := server.StartServer()
-	pkg.Init()
 	if err != nil {
 		return
 	}

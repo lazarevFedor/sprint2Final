@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
-	"pkg"
 	"strconv"
 	"time"
 )
@@ -32,7 +31,7 @@ func ManageTasks() {
 	for range ticker.C {
 		req, err := http.NewRequest("GET", "http://localhost:8080/internal/task", nil)
 		if err != nil {
-			pkg.ErrorLogger.Println("ManageTasks unknown error:", err)
+			//pkg.ErrorLogger.Println("ManageTasks unknown error:", err)
 			continue
 		}
 
@@ -40,7 +39,7 @@ func ManageTasks() {
 		if err != nil || resp.StatusCode == http.StatusNotFound {
 			continue
 		} else if resp.StatusCode == http.StatusInternalServerError {
-			pkg.ErrorLogger.Println("ManageTasks internal server error")
+			//pkg.ErrorLogger.Println("ManageTasks internal server error")
 			return
 		}
 
@@ -51,11 +50,11 @@ func ManageTasks() {
 		}
 		err = resp.Body.Close()
 		if err != nil {
-			pkg.ErrorLogger.Println("ManageTasks closing response error:", err)
+			//pkg.ErrorLogger.Println("ManageTasks closing response error:", err)
 			return
 		}
 		taskChan <- task
-		pkg.InfoLogger.Println("Task received and sent to worker")
+		//pkg.InfoLogger.Println("Task received and sent to worker")
 	}
 }
 
@@ -70,7 +69,7 @@ func worker(client *http.Client, taskChan <-chan entities.AgentResponse) {
 func solveTask(client *http.Client, task entities.AgentResponse) {
 	result, err := demon.CalculateExpression(task.Arg1, task.Arg2, task.Operation, task.OperationTime)
 	if err != nil {
-		pkg.ErrorLogger.Println("solveTask unknown error:", err)
+		//pkg.ErrorLogger.Println("solveTask unknown error:", err)
 		return
 	}
 	request := entities.AgentRequest{}
@@ -78,26 +77,26 @@ func solveTask(client *http.Client, task entities.AgentResponse) {
 	request.Result = result
 	data, err := json.Marshal(request)
 	if err != nil {
-		pkg.ErrorLogger.Println("solveTask marshall data error:", err)
+		//pkg.ErrorLogger.Println("solveTask marshall data error:", err)
 		return
 	}
 
 	req, err := http.NewRequest("POST", "http://localhost:8080/internal/task", bytes.NewBuffer(data))
 	if err != nil {
-		pkg.ErrorLogger.Println("solveTask POST request error:", err)
+		//pkg.ErrorLogger.Println("solveTask POST request error:", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
-		pkg.ErrorLogger.Println("solveTask getting response error:", err)
+		//pkg.ErrorLogger.Println("solveTask getting response error:", err)
 		return
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		pkg.ErrorLogger.Println("solveTask closing response error:", err)
+		//pkg.ErrorLogger.Println("solveTask closing response error:", err)
 		return
 	}
-	pkg.InfoLogger.Println("Task solved and sent to server")
+	//pkg.InfoLogger.Println("Task solved and sent to server")
 }
