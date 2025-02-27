@@ -4,17 +4,21 @@ import (
 	"agent/internal/demon"
 	"agent/internal/entities"
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
+	logger2 "pkg/logger"
 	"strconv"
 	"time"
 )
 
 // ManageTasks is a function that manages tasks
-func ManageTasks() {
+func ManageTasks(ctx context.Context) {
+	logger := logger2.GetLogger(ctx)
+	logger.Info("ManageTasks: Start")
 	client := &http.Client{}
-	ticker := time.NewTicker(10 * time.Second)
+	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	computingPower, err := strconv.Atoi(os.Getenv("COMPUTING_POWER"))
@@ -25,13 +29,13 @@ func ManageTasks() {
 	taskChan := make(chan entities.AgentResponse, 1)
 
 	for i := 0; i < computingPower; i++ {
-		go worker(client, taskChan)
+		go worker(client, taskChan, ctx)
 	}
 
 	for range ticker.C {
-		req, err := http.NewRequest("GET", "http://localhost:8080/internal/task", nil)
+		req, err := http.NewRequest("GET", "http://orchestrator:8080/internal/task", nil)
 		if err != nil {
-			//pkg.ErrorLogger.Println("ManageTasks unknown error:", err)
+			logger.Error("ManageTasks: GET request error:", err)
 			continue
 		}
 
@@ -39,37 +43,38 @@ func ManageTasks() {
 		if err != nil || resp.StatusCode == http.StatusNotFound {
 			continue
 		} else if resp.StatusCode == http.StatusInternalServerError {
-			//pkg.ErrorLogger.Println("ManageTasks internal server error")
+			logger.Error("ManageTasks: getting response error:", err)
 			return
 		}
 
 		var task entities.AgentResponse
 		if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
-			// Обработка ошибки
+			logger.Error("ManageTasks: decoding response error:", err)
 			continue
 		}
 		err = resp.Body.Close()
 		if err != nil {
-			//pkg.ErrorLogger.Println("ManageTasks closing response error:", err)
+			logger.Error("ManageTasks: closing response error:", err)
 			return
 		}
 		taskChan <- task
-		//pkg.InfoLogger.Println("Task received and sent to worker")
+		logger.Info("ManageTasks: Task received")
 	}
 }
 
 // worker is a function that processes tasks
-func worker(client *http.Client, taskChan <-chan entities.AgentResponse) {
+func worker(client *http.Client, taskChan <-chan entities.AgentResponse, ctx context.Context) {
 	for task := range taskChan {
-		solveTask(client, task)
+		solveTask(client, task, ctx)
 	}
 }
 
 // solveTask is a function that solves the task
-func solveTask(client *http.Client, task entities.AgentResponse) {
+func solveTask(client *http.Client, task entities.AgentResponse, ctx context.Context) {
+	logger := logger2.GetLogger(ctx)
 	result, err := demon.CalculateExpression(task.Arg1, task.Arg2, task.Operation, task.OperationTime)
 	if err != nil {
-		//pkg.ErrorLogger.Println("solveTask unknown error:", err)
+		logger.Error("solveTask: calculating expression error:", err)
 		return
 	}
 	request := entities.AgentRequest{}
@@ -77,26 +82,26 @@ func solveTask(client *http.Client, task entities.AgentResponse) {
 	request.Result = result
 	data, err := json.Marshal(request)
 	if err != nil {
-		//pkg.ErrorLogger.Println("solveTask marshall data error:", err)
+		logger.Error("solveTask: marshalling request error:", err)
 		return
 	}
 
-	req, err := http.NewRequest("POST", "http://localhost:8080/internal/task", bytes.NewBuffer(data))
+	req, err := http.NewRequest("POST", "http://orchestrator:8080/internal/task", bytes.NewBuffer(data))
 	if err != nil {
-		//pkg.ErrorLogger.Println("solveTask POST request error:", err)
+		logger.Error("solveTask: POST request error:", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
-		//pkg.ErrorLogger.Println("solveTask getting response error:", err)
+		logger.Error("solveTask: sending response error:", err)
 		return
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		//pkg.ErrorLogger.Println("solveTask closing response error:", err)
+		logger.Error("solveTask: closing response error:", err)
 		return
 	}
-	//pkg.InfoLogger.Println("Task solved and sent to server")
+	logger.Info("solveTask: Task solved")
 }
