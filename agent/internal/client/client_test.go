@@ -1,3 +1,9 @@
 package client
 
-//TODO: add tests for client
+import (
+	"testing"
+)
+
+func TestManageTasks(t *testing.T) {
+
+}
