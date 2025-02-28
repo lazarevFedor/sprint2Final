@@ -64,7 +64,7 @@ func getHandler(ctx context.Context) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(task); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			logger.Error("getHandler: could not encode response: %v", err)
+			logger.Error("getHandler: could not encode response:", "err", err)
 			return
 		}
 	}
@@ -77,7 +77,7 @@ func postHandler(ctx context.Context) http.HandlerFunc {
 		var taskRes obj.ClientResponse
 		if err := json.NewDecoder(r.Body).Decode(&taskRes); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			logger.Error("postHandler: could not decode request: %v", err)
+			logger.Error("postHandler: could not decode request:", "err", err)
 			return
 		}
 		node := obj.ParsersTree.Search(taskRes.Id)
@@ -101,7 +101,7 @@ func calculateHandler(ctx context.Context) http.HandlerFunc {
 		if err != nil {
 			clientResponse.Error = "Internal server error"
 			w.WriteHeader(http.StatusInternalServerError)
-			logger.Error("calculateHandler: could not decode request: %v", err)
+			logger.Error("calculateHandler: could not decode request:", "err", err)
 			return
 		}
 		if !isValidExpression(clientRequest.Expression) {
@@ -114,7 +114,7 @@ func calculateHandler(ctx context.Context) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(clientResponse); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			logger.Error("calculateHandler: could not encode response: %v", err)
+			logger.Error("calculateHandler: could not encode response:", "err", err)
 			return
 		}
 		obj.TasksLastID.Increment()
@@ -142,7 +142,7 @@ func expressionHandler(ctx context.Context) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{"expressions": expressions}); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
-			logger.Error("expressionHandler: could not encode response: %v", err)
+			logger.Error("expressionHandler: could not encode response:", "err", err)
 			return
 		}
 	}
@@ -168,7 +168,7 @@ func expressionIDHandler(ctx context.Context) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(expression); err != nil {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			logger.Error("expressionIDHandler: could not encode response: %v", err)
+			logger.Error("expressionIDHandler: could not encode response:", "err", err)
 			return
 		}
 	}
@@ -199,7 +199,7 @@ func StartServer(ctx context.Context) error {
 	// Start the server
 	err := http.ListenAndServe(":8080", mux)
 	if err != nil {
-		logger.Error("StartServer: could not start server: %v", err)
+		logger.Error("StartServer: could not start server:", "err", err)
 		return fmt.Errorf("could not start server: %v", err)
 	}
 	obj.Wg.Wait()

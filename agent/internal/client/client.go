@@ -35,7 +35,7 @@ func ManageTasks(ctx context.Context) {
 	for range ticker.C {
 		req, err := http.NewRequest("GET", "http://orchestrator:8080/internal/task", nil)
 		if err != nil {
-			logger.Error("ManageTasks: GET request error:", err)
+			logger.Error("ManageTasks: GET request error:", "err", err)
 			continue
 		}
 
@@ -43,18 +43,18 @@ func ManageTasks(ctx context.Context) {
 		if err != nil || resp.StatusCode == http.StatusNotFound {
 			continue
 		} else if resp.StatusCode == http.StatusInternalServerError {
-			logger.Error("ManageTasks: getting response error:", err)
+			logger.Error("ManageTasks: getting response error:", "err", err)
 			return
 		}
 
 		var task entities.AgentResponse
 		if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
-			logger.Error("ManageTasks: decoding response error:", err)
+			logger.Error("ManageTasks: decoding response error:", "err", err)
 			continue
 		}
 		err = resp.Body.Close()
 		if err != nil {
-			logger.Error("ManageTasks: closing response error:", err)
+			logger.Error("ManageTasks: closing response error:", "err", err)
 			return
 		}
 		taskChan <- task
@@ -74,7 +74,7 @@ func solveTask(client *http.Client, task entities.AgentResponse, ctx context.Con
 	logger := logger2.GetLogger(ctx)
 	result, err := demon.CalculateExpression(task.Arg1, task.Arg2, task.Operation, task.OperationTime)
 	if err != nil {
-		logger.Error("solveTask: calculating expression error:", err)
+		logger.Error("solveTask: calculating expression error:", "err", err)
 		return
 	}
 	request := entities.AgentRequest{}
@@ -82,25 +82,25 @@ func solveTask(client *http.Client, task entities.AgentResponse, ctx context.Con
 	request.Result = result
 	data, err := json.Marshal(request)
 	if err != nil {
-		logger.Error("solveTask: marshalling request error:", err)
+		logger.Error("solveTask: marshalling request error:", "err", err)
 		return
 	}
 
 	req, err := http.NewRequest("POST", "http://orchestrator:8080/internal/task", bytes.NewBuffer(data))
 	if err != nil {
-		logger.Error("solveTask: POST request error:", err)
+		logger.Error("solveTask: POST request error:", "err", err)
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil || resp.StatusCode != http.StatusOK {
-		logger.Error("solveTask: sending response error:", err)
+		logger.Error("solveTask: sending response error:", "err", err)
 		return
 	}
 	err = resp.Body.Close()
 	if err != nil {
-		logger.Error("solveTask: closing response error:", err)
+		logger.Error("solveTask: closing response error:", "err", err)
 		return
 	}
 	logger.Info("solveTask: Task solved")
