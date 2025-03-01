@@ -47,6 +47,63 @@ sprint1FINAL/
 ├── Dockerfile                      # Dockerfile для сборки проекта
 └── go.work                         # Файл Go workspace для управления несколькими модулями
 ````
+
+## Инструкция по запуску
+
+Проект можно запустить с помощью Docker и Docker Compose. Оркестратор и агент собираются в отдельные Docker-образы, которые затем запускаются как сервисы через `docker-compose`.
+
+### Требования
+
+- Установленный [Docker](https://docs.docker.com/get-docker/).
+- Установленный [Docker Compose](https://docs.docker.com/compose/install/).
+- Убедитесь, что у вас есть доступ к порту `8080` (используется оркестратором).
+
+### Шаги для запуска
+
+1. **Склонируйте репозиторий**:
+   ```bash
+   git clone <repository-url>
+   cd sprint1FINAL
+2. Соберите и запустите проект:
+   - Выполните команду для сборки и запуска контейнеров:
+        ```bash
+        docker-compose up --build
+        ```
+     - Эта команда:
+       - Соберёт Docker-образы agent-app и orchestrator-app с использованием Dockerfile.
+       - Запустит два сервиса: agent и orchestrator.
+       - Откроет порт 8080 для доступа к API оркестратора.
+3. Проверьте запуск:
+   - Убедитесь, что оркестратор доступен по адресу http://localhost:8080.
+   - Вы можете отправить тестовый запрос для вычисления выражения:
+   ```bash
+   curl -X POST http://localhost:8080/api/v1/calculate -H "Content-Type: application/json" -d '{"expression":"2*8-9"}'
+   ```
+   - Ожидаемый ответ:
+   ```json
+   {
+       "id": 0
+   }
+   ```
+   - Затем запросите результат:
+    ```bash
+   curl -X GET http://localhost:8080/api/v1/expressions/0
+   ```
+    - Ожидаемый ответ:
+    ```json
+    {
+         "id": 0,
+         "status": "Done",
+         "result": 5
+    }
+    ```
+4. Остановите контейнеры:
+    - Для остановки контейнеров выполните `Ctrl+C`.
+    - Для полного удаления контейнеров выполните:
+      ```bash
+      docker-compose down
+      ```
+
 ## Agent
 Директория agent содержит код агента, который получает посрдеством HTTP-запросов выражения для вычисления и отправляет результаты вычислений оркестратору. Агент состоит из следующих пакетов:
 - cmd: точка входа для агента
@@ -228,18 +285,15 @@ curl --location 'localhost/api/v1/expressions'
     "expressions": [
         {
             "id": 1,
-            "expression": "2+3",
             "status": "Done",
             "result": 5
         },
         {
             "id": 2,
-            "expression": "3*4",
             "status": "In progress"
         },
        {
             "id": 3,
-            "expression": "5/0",
             "status": "Fail",
             "error": "division by zero"
        }
@@ -270,7 +324,6 @@ curl --location 'localhost/api/v1/expressions/1'
 ```json
 {
     "id": 1,
-    "expression": "2+3",
     "status": "Done",
     "result": 5
 }
@@ -316,6 +369,7 @@ curl --location 'localhost/api/v1/expressions/1'
 #### 4. Завершение обработки
    - Горутина Parse, ожидавшая результата в канале, получает его и продолжает парсинг.
    - После завершения всех вычислений результат сохраняется в obj.Expressions с соответствующим статусом (Done или Fail).
+   - После получения результата запуститься таймер, выражение будет удалено через 3 минуты горутиной startGarbageCollector().
    - Клиент может запросить результат через GET /api/v1/expressions/:id.
 
 #### Схема взаимодействия оркестратора с агентом:
@@ -342,4 +396,61 @@ sequenceDiagram
 
     C->>O: GET /api/v1/expressions/1
     O-->>C: 200 OK {"expression": {"id": 1, "status": "Done", "result": 5}}
+```
+
+## Тестирование
+Для запуска тестов перейдите в соответствующую директорию и выполните команду `go test ./...`. Например:
+```bash
+cd orchestrator
+go test ./...
+```
+Таким образом, будут запущены все тесты внутри пакета orchestrator.
+
+## Примеры использования
+### Пример 1: Вычисление выражения
+1. Отправьте POST-запрос для вычисления выражения:
+```bash
+curl -X POST http://localhost:8080/api/v1/calculate -H "Content-Type: application/json" -d '{"expression":"2*8-9"}'
+```
+
+2. Ожидаемый ответ:
+```json
+{
+    "id": 0
+}
+```
+3. Запросите результат:
+```bash
+curl -X GET http://localhost:8080/api/v1/expressions/0
+```
+4. Ожидаемый ответ:
+```json
+{
+    "id": 0,
+    "status": "Done",
+    "result": 9
+}
+```
+5. Если вы запросите результат сразу после отправки выражения, вы получите статус "In progress":
+```json
+{
+    "id": 0,
+    "status": "In progress"
+}
+```
+6. Запрос всех выражений:
+```bash
+curl -X GET http://localhost:8080/api/v1/expressions
+```
+7. Ожидаемый ответ:
+```json
+{
+    "expressions": [
+        {
+            "id": 0,
+            "status": "Done",
+            "result": 9
+        }
+    ]
+}
 ```
