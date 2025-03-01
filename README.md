@@ -64,7 +64,36 @@ sprint1FINAL/
    ```bash
    git clone <repository-url>
    cd sprint1FINAL
-2. Соберите и запустите проект:
+    ```
+2. Настройте переменные окружения:
+   - Откройте файл docker-compose.yml и замените значения переменных окружения для сервисов agent и orchestrator:
+
+```bash
+services:
+  agent:
+    image: agent-app
+    build:
+      context: .
+      target: agent
+    environment:
+      - COMPUTING_POWER=10
+
+  orchestrator:
+    image: orchestrator-app
+    build:
+      context: .
+      target: orchestrator
+    ports:
+      - "8080:8080"
+    environment:
+      - TIME_ADDITION_MS=100
+      - TIME_SUBTRACTION_MS=100
+      - TIME_MULTIPLICATIONS_MS=100
+      - TIME_DIVISIONS_MS=100
+      - COMPUTING_POWER=10
+```
+
+3. Соберите и запустите проект:
    - Выполните команду для сборки и запуска контейнеров:
         ```bash
         docker-compose up --build
@@ -73,7 +102,7 @@ sprint1FINAL/
        - Соберёт Docker-образы agent-app и orchestrator-app с использованием Dockerfile.
        - Запустит два сервиса: agent и orchestrator.
        - Откроет порт 8080 для доступа к API оркестратора.
-3. Проверьте запуск:
+4. Проверьте запуск:
    - Убедитесь, что оркестратор доступен по адресу http://localhost:8080.
    - Вы можете отправить тестовый запрос для вычисления выражения:
    ```bash
@@ -97,7 +126,7 @@ sprint1FINAL/
          "result": 5
     }
     ```
-4. Остановите контейнеры:
+5. Остановите контейнеры:
     - Для остановки контейнеров выполните `Ctrl+C`.
     - Для полного удаления контейнеров выполните:
       ```bash
