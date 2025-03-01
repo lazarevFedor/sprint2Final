@@ -7,7 +7,6 @@ import (
 	"net/http"
 	obj "orchestrator/internal/entities"
 	"orchestrator/internal/parser"
-	"os"
 	logger2 "pkg/logger"
 	"regexp"
 	"strconv"
@@ -179,11 +178,6 @@ func StartServer(ctx context.Context) error {
 	// Get the logger from the context
 	logger := logger2.GetLogger(ctx)
 	// Set the environment variables
-	_ = os.Setenv("TIME_ADDITION_MS", "100")
-	_ = os.Setenv("TIME_SUBTRACTION_MS", "100")
-	_ = os.Setenv("TIME_MULTIPLICATIONS_MS", "100")
-	_ = os.Setenv("TIME_DIVISIONS_MS", "100")
-	_ = os.Setenv("COMPUTING_POWER", "10")
 
 	mux := http.NewServeMux()
 	// Start the garbage collector to remove old tasks
