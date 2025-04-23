@@ -333,7 +333,7 @@ func (tree *Tree) Delete(key int) error {
 	var child *Node
 	node := tree.Search(key)
 	if node == nil {
-		return fmt.Errorf("Node doesnt exist: %v", key)
+		return fmt.Errorf("node doesnt exist: %v", key)
 	}
 	if node.Left != nil && node.Right != nil {
 		pred := node.Left.maximumNode()
