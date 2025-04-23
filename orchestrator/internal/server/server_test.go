@@ -10,27 +10,8 @@ import (
 	"orchestrator/internal/entities"
 	"pkg"
 	logger2 "pkg/logger"
-	"sync"
 	"testing"
 )
-
-type mockParsersTree struct {
-	data map[int]*chan float64
-	sync.Mutex
-}
-
-func (m *mockParsersTree) Insert(id int, ch *chan float64) {
-	m.Lock()
-	defer m.Unlock()
-	m.data[id] = ch
-}
-
-func (m *mockParsersTree) Delete(id int) error {
-	m.Lock()
-	defer m.Unlock()
-	delete(m.data, id)
-	return nil
-}
 
 func TestIsValidExpression(t *testing.T) {
 	tests := []struct {
