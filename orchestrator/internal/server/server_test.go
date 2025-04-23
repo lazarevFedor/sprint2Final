@@ -32,10 +32,6 @@ func (m *mockParsersTree) Delete(id int) error {
 	return nil
 }
 
-var (
-	mockWg sync.WaitGroup
-)
-
 func TestIsValidExpression(t *testing.T) {
 	tests := []struct {
 		name       string
