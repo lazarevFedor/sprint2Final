@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+option go_package = "pkg/api";
+
+package api;
+
+service Orchestrator {
+  rpc GetTask(GetTaskRequest) returns(GetTaskResponse);
+  rpc PostTask(PostTaskRequest) returns (PostTaskResponse);
+}
+
+message GetTaskRequest {}
+
+message GetTaskResponse {
+  int32 id = 1;
+  float arg1 = 2;
+  float arg2 = 3;
+  string operation = 4;
+  int32 operation_time = 5;
+}
+
+message PostTaskRequest {
+  int32 id = 1;
+  float result = 2;
+}
+
+message PostTaskResponse {}
