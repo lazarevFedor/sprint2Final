@@ -2,6 +2,7 @@ package parser
 
 import (
 	"errors"
+	"fmt"
 	obj "orchestrator/internal/entities"
 	"os"
 	"strconv"
@@ -118,12 +119,18 @@ func getResult(output string, ch *chan float64, Id int) (float64, error) {
 }
 
 // Parse the expression into Reverse Polish Notation and returns the result
-func Parse(expression string, Id int) {
+func Parse(expression string, Id int, userId int) {
 	defer obj.Wg.Done()
 	var stack []node
 	var output, current string
 	parserChan := make(chan float64)
-	obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "In progress"})
+	t := obj.ClientResponse{
+		Id:     Id,
+		Status: "In progress",
+	}
+	t.SetUserId(userId)
+	obj.Expressions.Set(strconv.Itoa(Id), t)
+	fmt.Printf("Task with id(%d) and user_id(%d) has been added to the queue)", Id, userId)
 	obj.ParserMutex.Lock()
 	obj.ParsersTree.Insert(Id, &parserChan)
 	obj.ParserMutex.Unlock()
@@ -131,7 +138,12 @@ func Parse(expression string, Id int) {
 		obj.ParserMutex.Lock()
 		_ = obj.ParsersTree.Delete(Id)
 		obj.ParserMutex.Unlock()
-		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "empty expression"})
+		t.Id = Id
+		t.Status = "Fail"
+		t.Error = "empty expression"
+		t.SetUserId(userId)
+		obj.Expressions.Set(strconv.Itoa(Id), t)
+		fmt.Printf("Task with id(%d) failed with error %s", Id, "empty expression")
 		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 		task.SetTimestamp(time.Now())
 		return
@@ -153,7 +165,11 @@ func Parse(expression string, Id int) {
 						obj.ParserMutex.Lock()
 						_ = obj.ParsersTree.Delete(Id)
 						obj.ParserMutex.Unlock()
-						obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "'(' not found"})
+						t.Id = Id
+						t.Status = "Fail"
+						t.Error = "'(' not found"
+						t.SetUserId(userId)
+						obj.Expressions.Set(strconv.Itoa(Id), t)
 						task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 						task.SetTimestamp(time.Now())
 					}
@@ -183,7 +199,11 @@ func Parse(expression string, Id int) {
 			obj.ParserMutex.Lock()
 			_ = obj.ParsersTree.Delete(Id)
 			obj.ParserMutex.Unlock()
-			obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: "wrong symbol"})
+			t.Id = Id
+			t.Status = "Fail"
+			t.Error = "wrong symbol"
+			t.SetUserId(userId)
+			obj.Expressions.Set(strconv.Itoa(Id), t)
 			task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 			task.SetTimestamp(time.Now())
 		}
@@ -201,12 +221,20 @@ func Parse(expression string, Id int) {
 	_ = obj.ParsersTree.Delete(Id)
 	obj.ParserMutex.Unlock()
 	if err != nil {
-		obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Fail", Error: err.Error()})
+		t.Id = Id
+		t.Status = "Fail"
+		t.Error = err.Error()
+		t.SetUserId(userId)
+		obj.Expressions.Set(strconv.Itoa(Id), t)
 		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 		task.SetTimestamp(time.Now())
 		return
 	}
-	obj.Expressions.Set(strconv.Itoa(Id), obj.ClientResponse{Id: Id, Status: "Done", Result: result})
+	t.Id = Id
+	t.Status = "Done"
+	t.Result = result
+	t.SetUserId(userId)
+	obj.Expressions.Set(strconv.Itoa(Id), t)
 	task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
 	task.SetTimestamp(time.Now())
 }
