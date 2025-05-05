@@ -15,7 +15,7 @@ func main() {
 	clientLogger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	ctx := logger.WithLogger(context.Background(), clientLogger)
 	log := logger.GetLogger(ctx)
-	conn, err := grpc.NewClient("localhost:8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient("orchestrator:8081", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Error("Failed to connect to orch_grpc server: ", err)
 		return
