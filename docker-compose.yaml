@@ -14,6 +14,7 @@ services:
       target: orchestrator
     ports:
       - "8080:8080"
+      - "8081:8081"
     environment:
       - TIME_ADDITION_MS=100
       - TIME_SUBTRACTION_MS=100
