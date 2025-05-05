@@ -6,7 +6,6 @@ import (
 	obj "orchestrator/internal/entities"
 	"os"
 	"strconv"
-	"time"
 )
 
 // getEnvAsInt returns the value of the environment variable as an integer
@@ -144,8 +143,6 @@ func Parse(expression string, Id int, userId int) {
 		t.SetUserId(userId)
 		obj.Expressions.Set(strconv.Itoa(Id), t)
 		fmt.Printf("Task with id(%d) failed with error %s", Id, "empty expression")
-		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
-		task.SetTimestamp(time.Now())
 		return
 	}
 	for i := 0; i < len(expression); i++ {
@@ -170,8 +167,6 @@ func Parse(expression string, Id int, userId int) {
 						t.Error = "'(' not found"
 						t.SetUserId(userId)
 						obj.Expressions.Set(strconv.Itoa(Id), t)
-						task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
-						task.SetTimestamp(time.Now())
 					}
 					if stack[len(stack)-1].Data == "(" {
 						break
@@ -204,8 +199,6 @@ func Parse(expression string, Id int, userId int) {
 			t.Error = "wrong symbol"
 			t.SetUserId(userId)
 			obj.Expressions.Set(strconv.Itoa(Id), t)
-			task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
-			task.SetTimestamp(time.Now())
 		}
 	}
 	if current != "" {
@@ -226,8 +219,6 @@ func Parse(expression string, Id int, userId int) {
 		t.Error = err.Error()
 		t.SetUserId(userId)
 		obj.Expressions.Set(strconv.Itoa(Id), t)
-		task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
-		task.SetTimestamp(time.Now())
 		return
 	}
 	t.Id = Id
@@ -235,6 +226,4 @@ func Parse(expression string, Id int, userId int) {
 	t.Result = result
 	t.SetUserId(userId)
 	obj.Expressions.Set(strconv.Itoa(Id), t)
-	task := obj.Expressions.Get(strconv.Itoa(Id)).(obj.ClientResponse)
-	task.SetTimestamp(time.Now())
 }
