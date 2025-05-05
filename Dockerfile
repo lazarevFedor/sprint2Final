@@ -1,5 +1,5 @@
 # Stage 1: Build the agent
-FROM golang:1.21 AS agent-builder
+FROM golang:1.23 AS agent-builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ COPY pkg ./pkg
 RUN cd agent && go build -o agent ./cmd
 
 # Stage 2: Build the orchestrator
-FROM golang:1.21 AS orchestrator-builder
+FROM golang:1.23 AS orchestrator-builder
 
 WORKDIR /app
 
