@@ -2,7 +2,6 @@ package grpc_server
 
 import (
 	"context"
-	"fmt"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"log/slog"
@@ -17,7 +16,6 @@ type Server struct {
 }
 
 func New() *Server {
-	fmt.Printf("Server struct created")
 	return &Server{}
 }
 

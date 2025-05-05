@@ -18,27 +18,52 @@ import (
 )
 
 const (
-	UpdateExpressionStatus = "UPDATE expressions SET user_id= $1, result = $2, status = $3, expiredIn = $4 WHERE id = $5"
-	DeleteOldExpressions   = "DELETE FROM expressions WHERE status IN ('Done', 'Fail') AND expiredIn < datetime('now', '-4 minutes')"
+	UpdateExpressionStatus = "UPDATE expressions SET user_id= $1, result = $2, status = $3 WHERE id = $4"
 	secretKey              = "secret"
 )
 
+// syncDBWithCache starts synchronization DB with cache
+func syncDBWithCache(ctx context.Context, db *sql.DB) error {
+	logger := logger2.GetLogger(ctx)
+	rows, err := db.QueryContext(ctx, "SELECT id, user_id, expression FROM expressions WHERE status = $1", "In progress")
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		logger.Error("Error in syncDBWithCache: ", err.Error())
+		return fmt.Errorf("syncDBWithCache: %w", err)
+	}
+	defer func(rows *sql.Rows) {
+		err := rows.Close()
+		if err != nil {
+			logger.Error("syncDBWithCache: closing rows: ", err.Error())
+		}
+	}(rows)
+	if rows != nil {
+		for rows.Next() {
+			var expr string
+			var userId int
+			var id int
+			err = rows.Scan(&id, &userId, &expr)
+			if err != nil {
+				logger.Error("Error in syncDBWithCache: ", err.Error())
+				return fmt.Errorf("syncDBWithCache: %w", err)
+			}
+			obj.Wg.Add(1)
+			go parser.Parse(expr, id, userId)
+		}
+	}
+	return nil
+}
+
 // startUpdatingDB updates DB with expressions in map and deletes old expressions
 func startUpdatingDB(ctx context.Context, db *sql.DB) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(15 * time.Second)
 	logger := logger2.GetLogger(ctx)
 	go func() {
 		for range ticker.C {
-			_, err := db.ExecContext(ctx, DeleteOldExpressions)
-			if err != nil {
-				logger.Error("Error deleting old expressions: ", err)
-				return
-			}
 			expressionsMap := obj.Expressions.GetAll()
 			for key, expr := range expressionsMap {
 				task, ok := expr.(obj.ClientResponse)
 				if ok && (task.Status == "Done" || task.Status == "Fail") {
-					_, err = db.ExecContext(ctx, UpdateExpressionStatus, task.GetUserId(), task.Result, task.Status, time.Now().UTC().Format("2006-01-02 15:04:05"), task.Id)
+					_, err := db.ExecContext(ctx, UpdateExpressionStatus, task.GetUserId(), task.Result, task.Status, task.Id)
 					if err != nil {
 						logger.Error("Error updating expressions: ", err)
 						return
@@ -80,7 +105,16 @@ func calculateHandler(ctx context.Context, db *sql.DB) http.HandlerFunc {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		clientResponse.Id = obj.TasksLastID.GetValue()
+		row := db.QueryRowContext(ctx, "INSERT INTO expressions(user_id, expression, status) VALUES(?, ?, ?) RETURNING id", userId, clientRequest.Expression, "In progress")
+		err = row.Scan(&clientResponse.Id)
+		if err != nil {
+			logger.Warn("calculateHandler: could not insert expressions: ", "err", err)
+			return
+		}
+		obj.Wg.Add(1)
+		go parser.Parse(clientRequest.Expression, clientResponse.Id, userId)
+
+		logger.Info("calculateHandler: expression was added to the queue:", clientResponse.Id)
 		w.WriteHeader(http.StatusCreated)
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(clientResponse); err != nil {
@@ -88,17 +122,6 @@ func calculateHandler(ctx context.Context, db *sql.DB) http.HandlerFunc {
 			logger.Error("calculateHandler: could not encode response:", "err", err)
 			return
 		}
-		obj.TasksLastID.Increment()
-		obj.Wg.Add(1)
-		_, err = db.ExecContext(ctx, "INSERT INTO expressions(id, user_id, expression, status) VALUES(?, ?, ?, ?)", clientResponse.Id, userId, clientRequest.Expression, "In progress")
-		if err != nil {
-			logger.Warn("calculateHandler: could not insert expressions: ", "err", err)
-			obj.Wg.Done()
-			return
-		}
-		go parser.Parse(clientRequest.Expression, clientResponse.Id, userId)
-
-		logger.Info("calculateHandler: expression was added to the queue:", clientResponse.Id)
 	}
 }
 
@@ -113,7 +136,7 @@ func expressionHandler(ctx context.Context, db *sql.DB) http.HandlerFunc {
 			return
 		}
 		rows, err := db.QueryContext(ctx, `
-            SELECT id, result, status 
+            SELECT id, status, result 
             FROM expressions 
             WHERE user_id = ?`,
 			userID,
@@ -135,16 +158,11 @@ func expressionHandler(ctx context.Context, db *sql.DB) http.HandlerFunc {
 		for rows.Next() {
 			var expr obj.ClientResponse
 
-			err := rows.Scan(
+			_ = rows.Scan(
 				&expr.Id,
-				&expr.Result,
 				&expr.Status,
+				&expr.Result,
 			)
-
-			if err != nil {
-				logger.Error("row scan error", "error", err)
-				continue
-			}
 
 			expressions = append(expressions, expr)
 		}
@@ -352,6 +370,11 @@ func StartServer(ctx context.Context, db *sql.DB) error {
 	logger := logger2.GetLogger(ctx)
 
 	mux := http.NewServeMux()
+	//start synchronization DB with cache
+	err := syncDBWithCache(ctx, db)
+	if err != nil {
+		return fmt.Errorf("syncDBWithCache: %w", err)
+	}
 	//start updating DB
 	startUpdatingDB(ctx, db)
 	// Handle functions for client requests
@@ -360,9 +383,9 @@ func StartServer(ctx context.Context, db *sql.DB) error {
 	mux.HandleFunc("/api/v1/calculate", authMiddleware(ctx)(calculateHandler(ctx, db)))
 	mux.HandleFunc("/api/v1/expressions", authMiddleware(ctx)(expressionHandler(ctx, db)))
 	mux.HandleFunc("/api/v1/expressions/", authMiddleware(ctx)(expressionIDHandler(ctx, db)))
-
 	// Start the server
-	err := http.ListenAndServe(":8080", mux)
+	logger.Info("StartServer: server started")
+	err = http.ListenAndServe(":8080", mux)
 	if err != nil {
 		logger.Error("StartServer: could not start server:", "err", err)
 		return fmt.Errorf("could not start server: %v", err)
