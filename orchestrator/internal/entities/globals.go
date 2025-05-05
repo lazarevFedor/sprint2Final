@@ -11,5 +11,4 @@ var (
 	ParsersTree = pkg.NewRBTree()
 	Tasks       = &pkg.Queue{}
 	Expressions = pkg.NewSafeMap()
-	TasksLastID = &pkg.Counter{}
 )
