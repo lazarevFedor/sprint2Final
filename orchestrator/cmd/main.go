@@ -20,7 +20,7 @@ func createTables(ctx context.Context, db *sql.DB) error {
 	const (
 		usersTable = "CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT, login TEXT UNIQUE NOT NULL, password TEXT NOT NULL);"
 
-		expressionsTable = "CREATE TABLE IF NOT EXISTS expressions(id INTEGER PRIMARY KEY, user_id INTEGER, expression TEXT NOT NULL, result REAL, status TEXT NOT NULL, expiredIn TEXT);"
+		expressionsTable = "CREATE TABLE IF NOT EXISTS expressions(id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, expression TEXT NOT NULL, result REAL, status TEXT NOT NULL);"
 	)
 
 	if _, err := db.ExecContext(ctx, usersTable); err != nil {
