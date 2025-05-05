@@ -49,7 +49,7 @@ func ManageTasks(ctx context.Context, agent *AgentClient) {
 			OperationTime: int(taskAccepted.OperationTime),
 		}
 
-		logger.Info("ManageTasks: Task accepted:", task.Id)
+		logger.Info("ManageTasks: Task accepted:", "Id", task.Id)
 
 		taskChan <- task
 		logger.Info("ManageTasks: Task received")
@@ -81,5 +81,5 @@ func solveTask(agent *AgentClient, task entities.AgentResponse, ctx context.Cont
 		return
 	}
 	logger.Info("solveTask: Task solved")
-	logger.Info("Id:", task.Id, "Result:", result)
+	logger.Info("solveTask", "Id:", task.Id, "Result:", result)
 }

@@ -28,7 +28,7 @@ func (s *Server) GetTask(_ context.Context, _ *api.GetTaskRequest) (*api.GetTask
 		return nil, status.Error(codes.NotFound, "No available tasks")
 	}
 	task := obj.Tasks.Dequeue().(obj.Task)
-	log.Info("Task dequeued with Id", task.Id)
+	log.Info("Task dequeued with Id", "Id", task.Id)
 	return &api.GetTaskResponse{
 		Id:            int32(task.Id),
 		Arg1:          float32(task.Arg1),
@@ -49,6 +49,6 @@ func (s *Server) PostTask(_ context.Context, request *api.PostTaskRequest) (*api
 	}
 	ch := node.Value.(*chan float64)
 	*ch <- float64(request.Result)
-	log.Info("PostTask dequeued with Id", request.Id)
+	log.Info("PostTask dequeued with Id", "Id", request.Id)
 	return &api.PostTaskResponse{}, nil
 }

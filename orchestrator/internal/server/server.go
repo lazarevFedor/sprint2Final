@@ -27,13 +27,13 @@ func syncDBWithCache(ctx context.Context, db *sql.DB) error {
 	logger := logger2.GetLogger(ctx)
 	rows, err := db.QueryContext(ctx, "SELECT id, user_id, expression FROM expressions WHERE status = $1", "In progress")
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		logger.Error("Error in syncDBWithCache: ", err.Error())
+		logger.Error("Error in syncDBWithCache: ", "err", err)
 		return fmt.Errorf("syncDBWithCache: %w", err)
 	}
 	defer func(rows *sql.Rows) {
-		err := rows.Close()
+		err = rows.Close()
 		if err != nil {
-			logger.Error("syncDBWithCache: closing rows: ", err.Error())
+			logger.Error("syncDBWithCache: closing rows: ", "err", err)
 		}
 	}(rows)
 	if rows != nil {
@@ -43,7 +43,7 @@ func syncDBWithCache(ctx context.Context, db *sql.DB) error {
 			var id int
 			err = rows.Scan(&id, &userId, &expr)
 			if err != nil {
-				logger.Error("Error in syncDBWithCache: ", err.Error())
+				logger.Error("Error in syncDBWithCache: ", "err", err.Error())
 				return fmt.Errorf("syncDBWithCache: %w", err)
 			}
 			obj.Wg.Add(1)
@@ -65,7 +65,7 @@ func startUpdatingDB(ctx context.Context, db *sql.DB) {
 				if ok && (task.Status == "Done" || task.Status == "Fail") {
 					_, err := db.ExecContext(ctx, UpdateExpressionStatus, task.GetUserId(), task.Result, task.Status, task.Id)
 					if err != nil {
-						logger.Error("Error updating expressions: ", err)
+						logger.Error("Error updating expressions: ", "err", err)
 						return
 					}
 					obj.Expressions.Delete(key)
@@ -114,7 +114,7 @@ func calculateHandler(ctx context.Context, db *sql.DB) http.HandlerFunc {
 		obj.Wg.Add(1)
 		go parser.Parse(clientRequest.Expression, clientResponse.Id, userId)
 
-		logger.Info("calculateHandler: expression was added to the queue:", clientResponse.Id)
+		logger.Info("calculateHandler: expression was added to the queue:", "Id", clientResponse.Id)
 		w.WriteHeader(http.StatusCreated)
 		w.Header().Set("Content-Type", "application/json")
 		if err = json.NewEncoder(w).Encode(clientResponse); err != nil {
