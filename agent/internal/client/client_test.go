@@ -2,173 +2,145 @@ package client
 
 import (
 	"agent/internal/entities"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"log/slog"
-	"net/http"
-	"net/http/httptest"
 	"os"
+	"pkg/api"
 	logger2 "pkg/logger"
 	"testing"
 	"time"
 )
 
-func TestManageTasks(t *testing.T) {
-	tests := []struct {
-		name           string
-		computingPower string
-		serverResponse entities.AgentResponse
-		serverStatus   int
-		wantTaskSent   bool
-	}{
-		{
-			name:           "Server returns 404",
-			computingPower: "1",
-			serverResponse: entities.AgentResponse{},
-			serverStatus:   http.StatusNotFound,
-			wantTaskSent:   false,
-		},
-		{
-			name:           "Server returns 500",
-			computingPower: "1",
-			serverResponse: entities.AgentResponse{},
-			serverStatus:   http.StatusInternalServerError,
-			wantTaskSent:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == "GET" {
-					w.WriteHeader(tt.serverStatus)
-					json.NewEncoder(w).Encode(tt.serverResponse)
-				}
-			}))
-			defer server.Close()
-
-			defer func(oldURL string) { os.Setenv("ORCHESTRATOR_URL", oldURL) }(os.Getenv("ORCHESTRATOR_URL"))
-			os.Setenv("ORCHESTRATOR_URL", server.URL)
-
-			defer func(oldPower string) { os.Setenv("COMPUTING_POWER", oldPower) }(os.Getenv("COMPUTING_POWER"))
-			os.Setenv("COMPUTING_POWER", tt.computingPower)
-
-			var logBuf bytes.Buffer
-			clientLogger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-			ctx := logger2.WithLogger(context.Background(), clientLogger)
-
-			taskChan := make(chan entities.AgentResponse, 1)
-			go func() {
-				ManageTasks(ctx)
-			}()
-
-			time.Sleep(6 * time.Second)
-
-			select {
-			case task := <-taskChan:
-				if !tt.wantTaskSent {
-					t.Errorf("Task was sent to channel, but it shouldn't have been: %+v", task)
-				}
-			default:
-				if tt.wantTaskSent {
-					t.Errorf("No task was sent to channel, but it should have been")
-				}
-			}
-		})
-	}
+// mockOrchestratorClient struct for testing client.go
+type mockOrchestratorClient struct {
+	getTaskFunc    func(ctx context.Context, in *api.GetTaskRequest, opts ...grpc.CallOption) (*api.GetTaskResponse, error)
+	postTaskCalled bool
+	postTaskID     int32
+	postTaskResult float32
+	postTaskError  error
 }
 
-func TestSolveTask(t *testing.T) {
-	tests := []struct {
-		name           string
-		task           entities.AgentResponse
-		wantResult     float64
-		wantError      error
-		wantStatusCode int
-	}{
-		{
-			name:           "Successful addition",
-			task:           entities.AgentResponse{Id: 1, Arg1: 5, Arg2: 3, Operation: "+", OperationTime: 10},
-			wantResult:     8.0,
-			wantError:      nil,
-			wantStatusCode: http.StatusOK,
-		},
-		{
-			name:           "Successful multiplication",
-			task:           entities.AgentResponse{Id: 2, Arg1: 4, Arg2: 3, Operation: "*", OperationTime: 20},
-			wantResult:     12.0,
-			wantError:      nil,
-			wantStatusCode: http.StatusOK,
-		},
-		{
-			name:           "Wrong operator",
-			task:           entities.AgentResponse{Id: 3, Arg1: 5, Arg2: 2, Operation: "%", OperationTime: 10},
-			wantResult:     0.0,
-			wantError:      errors.New("wrong operator"),
-			wantStatusCode: 0,
-		},
-		{
-			name:           "Server error",
-			task:           entities.AgentResponse{Id: 4, Arg1: 2, Arg2: 2, Operation: "-", OperationTime: 5},
-			wantResult:     0.0,
-			wantError:      nil,
-			wantStatusCode: http.StatusInternalServerError,
-		},
+// GetTask imitates server handler
+func (m *mockOrchestratorClient) GetTask(ctx context.Context, in *api.GetTaskRequest, opts ...grpc.CallOption) (*api.GetTaskResponse, error) {
+	if m.getTaskFunc != nil {
+		return m.getTaskFunc(ctx, in, opts...)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if r.Method == "POST" {
-					w.WriteHeader(tt.wantStatusCode)
-					if tt.wantStatusCode == http.StatusOK {
-						var req entities.AgentRequest
-						json.NewDecoder(r.Body).Decode(&req)
-						if req.Result != tt.wantResult {
-							t.Errorf("Sent result = %v, want %v", req.Result, tt.wantResult)
-						}
-					}
-				}
-			}))
-			defer server.Close()
-
-			var logBuf bytes.Buffer
-			clientLogger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-			ctx := logger2.WithLogger(context.Background(), clientLogger)
-
-			client := &http.Client{}
-			solveTask(client, tt.task, ctx)
-		})
-	}
+	return nil, nil
 }
 
+// PostTask imitates server handler
+func (m *mockOrchestratorClient) PostTask(ctx context.Context, in *api.PostTaskRequest, opts ...grpc.CallOption) (*api.PostTaskResponse, error) {
+	m.postTaskCalled = true
+	m.postTaskID = in.Id
+	m.postTaskResult = in.Result
+	return &api.PostTaskResponse{}, m.postTaskError
+}
+
+// TestSolveTask_Success tests the happy path where calculation and posting succeed
+func TestSolveTask_Success(t *testing.T) {
+	mockClient := &mockOrchestratorClient{postTaskError: nil}
+	agent := NewAgentClient(mockClient)
+	ctx := logger2.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	task := entities.AgentResponse{
+		Id:            1,
+		Arg1:          2.0,
+		Arg2:          3.0,
+		Operation:     "+",
+		OperationTime: 100,
+	}
+
+	solveTask(agent, task, ctx)
+
+	assert.True(t, mockClient.postTaskCalled)
+	assert.Equal(t, int32(1), mockClient.postTaskID)
+	assert.Equal(t, float32(5.0), mockClient.postTaskResult)
+}
+
+// TestSolveTask_PostTaskFails tests when PostTask fails
+func TestSolveTask_PostTaskFails(t *testing.T) {
+	mockClient := &mockOrchestratorClient{postTaskError: errors.New("post task error")}
+	agent := NewAgentClient(mockClient)
+	ctx := logger2.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	task := entities.AgentResponse{
+		Id:            1,
+		Arg1:          2.0,
+		Arg2:          3.0,
+		Operation:     "+",
+		OperationTime: 100,
+	}
+
+	solveTask(agent, task, ctx)
+
+	assert.True(t, mockClient.postTaskCalled)
+}
+
+// TestWorker tests that the worker processes a task from the channel
 func TestWorker(t *testing.T) {
-	t.Run("Worker processes task", func(t *testing.T) {
-		taskChan := make(chan entities.AgentResponse, 1)
-		done := make(chan struct{})
 
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == "POST" {
-				w.WriteHeader(http.StatusOK)
+	mockClient := &mockOrchestratorClient{postTaskError: nil}
+	agent := NewAgentClient(mockClient)
+	taskChan := make(chan entities.AgentResponse, 1)
+	ctx := logger2.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	go worker(agent, taskChan, ctx)
+
+	task := entities.AgentResponse{
+		Id:            1,
+		Arg1:          2.0,
+		Arg2:          3.0,
+		Operation:     "+",
+		OperationTime: 100,
+	}
+	taskChan <- task
+
+	time.Sleep(100 * time.Millisecond) // Give worker time to process
+	assert.True(t, mockClient.postTaskCalled)
+	assert.Equal(t, int32(1), mockClient.postTaskID)
+	assert.Equal(t, float32(5.0), mockClient.postTaskResult)
+}
+
+// TestManageTasks tests that ManageTasks starts workers and processes a task
+func TestManageTasks(t *testing.T) {
+	os.Setenv("COMPUTING_POWER", "1")
+
+	taskReturned := false
+	mockClient := &mockOrchestratorClient{
+		getTaskFunc: func(ctx context.Context, in *api.GetTaskRequest, opts ...grpc.CallOption) (*api.GetTaskResponse, error) {
+			if !taskReturned {
+				taskReturned = true
+				return &api.GetTaskResponse{Id: 1, Arg1: 2.0, Arg2: 3.0, Operation: "+", OperationTime: 100}, nil
 			}
-		}))
-		defer server.Close()
+			return nil, status.Error(codes.NotFound, "no tasks")
+		},
+		postTaskError: nil,
+	}
 
-		var logBuf bytes.Buffer
-		clientLogger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-		ctx := logger2.WithLogger(context.Background(), clientLogger)
+	agent := NewAgentClient(mockClient)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx = logger2.WithLogger(ctx, slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
-		go func() {
-			worker(&http.Client{}, taskChan, ctx)
-			close(done)
-		}()
+	go ManageTasks(ctx, agent)
 
-		task := entities.AgentResponse{Id: 1, Arg1: 2, Arg2: 3, Operation: "+", OperationTime: 10}
-		taskChan <- task
-		close(taskChan)
-
-		<-done
-	})
+	timeout := time.After(10 * time.Second)
+	for {
+		select {
+		case <-timeout:
+			t.Fatal("Timeout waiting for PostTask")
+		default:
+			if mockClient.postTaskCalled {
+				assert.Equal(t, int32(1), mockClient.postTaskID)
+				assert.Equal(t, float32(5.0), mockClient.postTaskResult)
+				return
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }

@@ -1,122 +1,96 @@
 package server
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/stretchr/testify/assert"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"orchestrator/internal/entities"
-	"pkg"
 	logger2 "pkg/logger"
+	"strings"
 	"testing"
 )
 
+// TestIsValidExpression tests the isValidExpression function
 func TestIsValidExpression(t *testing.T) {
 	tests := []struct {
 		name       string
 		expression string
-		want       bool
+		expected   bool
 	}{
-		{name: "Valid expression", expression: "2 + 3", want: true},
-		{name: "Valid with parentheses", expression: "(2 + 3) * 4", want: true},
-		{name: "Invalid with letters", expression: "2 + a", want: false},
-		{name: "Empty string", expression: "", want: false},
+		{"valid simple", "2 + 3", true},
+		{"valid with parentheses", "4 * (5 - 2)", true},
+		{"invalid character", "2 + a", false},
+		{"empty string", "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := isValidExpression(tt.expression); got != tt.want {
-				t.Errorf("isValidExpression(%q) = %v, want %v", tt.expression, got, tt.want)
-			}
+			got := isValidExpression(tt.expression)
+			assert.Equal(t, tt.expected, got, "isValidExpression(%q) = %v, want %v", tt.expression, got, tt.expected)
 		})
 	}
 }
 
-func TestAgentMiddleware(t *testing.T) {
-	getHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write([]byte("GET"))
-		if err != nil {
-			return
-		}
-	})
-	postHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := w.Write([]byte("POST"))
-		if err != nil {
-			return
-		}
-	})
+// TestCalculateHandler_InvalidExpression tests calculateHandler with an invalid expression
+func TestCalculateHandler_InvalidExpression(t *testing.T) {
+	db, _, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
 
-	tests := []struct {
-		name       string
-		method     string
-		wantStatus int
-		wantBody   string
-	}{
-		{name: "GET request", method: "GET", wantStatus: http.StatusOK, wantBody: "GET"},
-		{name: "POST request", method: "POST", wantStatus: http.StatusOK, wantBody: "POST"},
-		{name: "PUT request", method: "PUT", wantStatus: http.StatusMethodNotAllowed, wantBody: "Method not allowed\n"},
-	}
+	ctx := logger2.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(nil, nil)))
+	token, _ := GenerateToken(1, secretKey)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest(tt.method, "/internal/task", nil)
-			w := httptest.NewRecorder()
-			handler := agentMiddleware(getHandler, postHandler)
-			handler.ServeHTTP(w, req)
-			if w.Code != tt.wantStatus {
-				t.Errorf("agentMiddleware status = %v, want %v", w.Code, tt.wantStatus)
-			}
-			if w.Body.String() != tt.wantBody {
-				t.Errorf("agentMiddleware body = %q, want %q", w.Body.String(), tt.wantBody)
-			}
-		})
-	}
+	reqBody := `{"expression": "2 + a"}`
+	req, _ := http.NewRequest("POST", "/api/v1/calculate", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req = req.WithContext(context.WithValue(ctx, "user_id", 1))
+
+	rr := httptest.NewRecorder()
+	handler := calculateHandler(ctx, db)
+	handler.ServeHTTP(rr, req)
+
+	assert.Equal(t, http.StatusUnprocessableEntity, rr.Code)
 }
 
-func TestGetHandler(t *testing.T) {
-	t.Run("Task available", func(t *testing.T) {
-		// Устанавливаем очередь с задачей
-		queue := &pkg.Queue{}
-		task := entities.Task{Id: 1, Arg1: 2, Arg2: 3, Operation: "+"}
-		queue.Enqueue(task)
-		entities.Tasks = queue
+// TestAuthMiddleware_ValidToken tests authMiddleware with a valid token
+func TestAuthMiddleware_ValidToken(t *testing.T) {
+	token, _ := GenerateToken(1, secretKey)
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 
-		var logBuf bytes.Buffer
-		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-		ctx := logger2.WithLogger(context.Background(), logger)
-
-		req := httptest.NewRequest("GET", "/internal/task", nil)
-		w := httptest.NewRecorder()
-		getHandler(ctx).ServeHTTP(w, req)
-
-		if w.Code != http.StatusOK {
-			t.Errorf("getHandler status = %v, want %v", w.Code, http.StatusOK)
-		}
-		var receivedTask entities.Task
-		if err := json.Unmarshal(w.Body.Bytes(), &receivedTask); err != nil {
-			t.Errorf("Failed to unmarshal response: %v", err)
-		}
-		if receivedTask.Id != 1 {
-			t.Errorf("getHandler task.Id = %v, want 1", receivedTask.Id)
-		}
+	rr := httptest.NewRecorder()
+	dummyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID, ok := r.Context().Value("user_id").(int)
+		assert.True(t, ok)
+		assert.Equal(t, 1, userID)
+		w.WriteHeader(http.StatusOK)
 	})
 
-	t.Run("No tasks", func(t *testing.T) {
-		// Устанавливаем пустую очередь
-		entities.Tasks = &pkg.Queue{}
+	middleware := authMiddleware(context.Background())
+	handler := middleware(dummyHandler)
+	handler.ServeHTTP(rr, req)
 
-		var logBuf bytes.Buffer
-		logger := slog.New(slog.NewJSONHandler(&logBuf, nil))
-		ctx := logger2.WithLogger(context.Background(), logger)
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
 
-		req := httptest.NewRequest("GET", "/internal/task", nil)
-		w := httptest.NewRecorder()
-		getHandler(ctx).ServeHTTP(w, req)
+// TestSyncDBWithCache tests syncDBWithCache
+func TestSyncDBWithCache(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
 
-		if w.Code != http.StatusNotFound {
-			t.Errorf("getHandler status = %v, want %v", w.Code, http.StatusNotFound)
-		}
-	})
+	rows := sqlmock.NewRows([]string{"id", "user_id", "expression"}).
+		AddRow(1, 1, "2 + 3").
+		AddRow(2, 1, "4 * 5")
+	mock.ExpectQuery("SELECT id, user_id, expression FROM expressions WHERE status = ?").
+		WithArgs("In progress").
+		WillReturnRows(rows)
+
+	ctx := logger2.WithLogger(context.Background(), slog.New(slog.NewJSONHandler(nil, nil)))
+	err = syncDBWithCache(ctx, db)
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
